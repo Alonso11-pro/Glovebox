@@ -54,6 +54,7 @@
   <input id="ul-pass" type="password" placeholder="Master password" autocomplete="current-password">
   <div class="err" id="ul-err"></div>
   <button onclick="doUnlock()">UNLOCK</button>
+  <button id="bio-btn" class="hidden" onclick="bioUnlock()" style="margin-top:8px">UNLOCK WITH FINGERPRINT</button>
   <div class="tools"><button class="btn-ghost btn-sm" onclick="showChange()">CHANGE MASTER PASSWORD</button></div>
   <div id="scr-change" class="hidden">
     <div class="label">CURRENT PASSWORD</div><input id="ch-old" type="password">
@@ -75,6 +76,7 @@
       <button class="btn-ghost btn-sm" onclick="showGen()">GENERATOR</button>
       <button class="btn-ghost btn-sm" onclick="showExport()">EXPORT</button>
       <button class="btn-ghost btn-sm" onclick="showImport()">IMPORT</button>
+      <button class="btn-ghost btn-sm" id="bio-tools-btn" onclick="showBio()">FINGERPRINT</button>
     </div>
     <div id="gen-box" class="card hidden">
       <div class="label">PASSWORD GENERATOR</div>
@@ -95,6 +97,19 @@
       <textarea id="imp-in"></textarea>
       <div class="row"><button class="btn-sm" onclick="doImport()">RESTORE</button></div>
       <div class="err" id="imp-err"></div>
+    </div>
+    <div id="bio-box" class="card hidden">
+      <div class="label" id="bio-head">FINGERPRINT UNLOCK</div>
+      <div id="bio-off">
+        <p style="color:var(--dim);font-size:12px;margin-bottom:8px">Stores your master password, encrypted by your phone's secure chip, so your fingerprint can open GLOVEBOX instead of typing it. Your phone's own lock screen is the second gate.</p>
+        <div class="label">CONFIRM MASTER PASSWORD</div><input id="bio-pass" type="password" autocomplete="current-password">
+        <div class="err" id="bio-err"></div>
+        <button class="btn-sm" onclick="enableBio()">ENABLE FINGERPRINT UNLOCK</button>
+      </div>
+      <div id="bio-on" class="hidden">
+        <p style="color:#3fbf6f;font-size:13px;margin-bottom:8px">Fingerprint unlock is ON.</p>
+        <button class="btn-ghost btn-sm" onclick="disableBio()">TURN OFF</button>
+      </div>
     </div>
     <div id="list"></div>
   </div>
@@ -214,7 +229,11 @@ function doChangeMaster(){
         KEY = key;
         return saveData();
       });
-    }).then(function(){ document.getElementById('ch-new').value=''; document.getElementById('ch-old').value=''; alert('Master password changed.'); });
+    }).then(function(){
+      document.getElementById('ch-new').value=''; document.getElementById('ch-old').value='';
+      try { if(window.AndroidBridge && localStorage.getItem('gb_bio')==='1') AndroidBridge.enableBio(n); } catch(e){}
+      alert('Master password changed.');
+    });
   }).catch(function(){ err.textContent = 'Current password is wrong.'; });
 }
 
@@ -309,9 +328,47 @@ function fallbackCopy(t){
   document.body.removeChild(ta);
 }
 
+function bioUnlock(){
+  if(window.AndroidBridge) AndroidBridge.bioUnlock();
+}
+function bioUnlockWithPassword(pw){
+  document.getElementById('ul-pass').value = pw;
+  doUnlock();
+}
+function showBio(){
+  var b = document.getElementById('bio-box');
+  if(window.AndroidBridge){
+    var on = localStorage.getItem('gb_bio') === '1' && AndroidBridge.isBioEnabled();
+    document.getElementById('bio-on').classList.toggle('hidden', !on);
+    document.getElementById('bio-off').classList.toggle('hidden', on);
+    b.classList.remove('hidden');
+  } else {
+    document.getElementById('bio-head').textContent = 'FINGERPRINT — NOT AVAILABLE';
+  }
+}
+function enableBio(){
+  var p = document.getElementById('bio-pass').value, err = document.getElementById('bio-err');
+  err.textContent = '';
+  tryUnlock(p).then(function(){
+    if(window.AndroidBridge && AndroidBridge.enableBio(p)){
+      localStorage.setItem('gb_bio','1');
+      document.getElementById('bio-pass').value='';
+      showBio();
+    } else { err.textContent = 'Phone refused — is a fingerprint enrolled?'; }
+  }).catch(function(){ err.textContent = 'Wrong master password.'; });
+}
+function disableBio(){
+  if(window.AndroidBridge) AndroidBridge.disableBio();
+  localStorage.setItem('gb_bio','0');
+  showBio();
+}
+
 (function init(){
   if(!localStorage.getItem(SALT_B)) show('scr-setup');
-  else show('scr-unlock');
+  else {
+    show('scr-unlock');
+    try { if(window.AndroidBridge && AndroidBridge.isBioEnabled()) document.getElementById('bio-btn').classList.remove('hidden'); } catch(e){}
+  }
 })();
 </script>
 </body>
