@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>GLOVEBOX</title>
+<style>
+  :root { --bg:#0a0a0a; --panel:#161616; --line:#2a2a2a; --txt:#e8e8e8; --dim:#8a8a8a; --acc:#ff6b1a; }
+  * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  body { background:var(--bg); color:var(--txt); font-family:-apple-system,'Segoe UI',Roboto,sans-serif; min-height:100vh; }
+  header { padding:22px 18px 10px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; }
+  h1 { font-family:monospace; font-size:20px; letter-spacing:4px; color:var(--acc); }
+  h1 span { color:var(--dim); font-size:10px; display:block; letter-spacing:1px; }
+  .wrap { max-width:560px; margin:0 auto; padding:14px 16px 90px; }
+  input, textarea, select { width:100%; background:var(--panel); border:1px solid var(--line); color:var(--txt); padding:12px; border-radius:8px; font-size:15px; margin-bottom:10px; outline:none; }
+  input:focus, textarea:focus { border-color:var(--acc); }
+  textarea { min-height:70px; resize:vertical; }
+  button { background:var(--acc); color:#000; border:none; padding:12px 18px; border-radius:8px; font-weight:700; font-size:14px; cursor:pointer; letter-spacing:1px; }
+  .btn-ghost { background:transparent; color:var(--dim); border:1px solid var(--line); font-weight:400; }
+  .btn-sm { padding:7px 11px; font-size:12px; border-radius:6px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:13px 14px; margin-bottom:10px; }
+  .card .t { font-weight:700; font-size:15px; }
+  .card .u { color:var(--dim); font-size:12px; margin-top:2px; word-break:break-all; }
+  .card .p { font-family:monospace; font-size:13px; color:var(--acc); margin-top:6px; word-break:break-all; }
+  .row { display:flex; gap:8px; margin-top:9px; flex-wrap:wrap; }
+  .center { min-height:100vh; display:flex; flex-direction:column; justify-content:center; max-width:400px; margin:0 auto; padding:20px; }
+  .logo { text-align:center; margin-bottom:30px; }
+  .logo .big { font-size:34px; letter-spacing:8px; color:var(--acc); font-family:monospace; font-weight:800; }
+  .logo .sub { color:var(--dim); font-size:11px; letter-spacing:3px; margin-top:6px; font-family:monospace; }
+  .err { color:#ff4444; font-size:13px; margin-bottom:10px; min-height:18px; }
+  .hidden { display:none !important; }
+  .fab { position:fixed; bottom:22px; right:20px; width:58px; height:58px; border-radius:50%; font-size:28px; padding:0; box-shadow:0 4px 18px rgba(255,107,26,.4); }
+  .label { font-family:monospace; font-size:11px; color:var(--dim); letter-spacing:2px; margin:8px 0 4px; }
+  .tools { display:flex; gap:8px; margin:12px 0; flex-wrap:wrap; }
+  .lockbar { position:fixed; top:0; left:0; right:0; background:#7a1a1a; color:#fff; text-align:center; font-size:12px; padding:4px; font-family:monospace; }
+</style>
+</head>
+<body>
+
+<!-- SETUP -->
+<div id="scr-setup" class="center hidden">
+  <div class="logo"><div class="big">GLOVEBOX</div><div class="sub">PERSONAL VAULT &middot; OFFLINE ONLY</div></div>
+  <div class="label">CREATE MASTER PASSWORD</div>
+  <input id="su-pass" type="password" placeholder="Master password" autocomplete="new-password">
+  <input id="su-pass2" type="password" placeholder="Repeat it" autocomplete="new-password">
+  <div class="err" id="su-err"></div>
+  <button onclick="doSetup()">BUILD THE VAULT</button>
+  <p style="color:var(--dim);font-size:12px;margin-top:16px">One password unlocks everything. There is no reset, no recovery, no server. If you forget it, the data is gone. Everything stays on this phone.</p>
+</div>
+
+<!-- UNLOCK -->
+<div id="scr-unlock" class="center hidden">
+  <div class="logo"><div class="big">GLOVEBOX</div><div class="sub">LOCKED</div></div>
+  <input id="ul-pass" type="password" placeholder="Master password" autocomplete="current-password">
+  <div class="err" id="ul-err"></div>
+  <button onclick="doUnlock()">UNLOCK</button>
+  <div class="tools"><button class="btn-ghost btn-sm" onclick="showChange()">CHANGE MASTER PASSWORD</button></div>
+  <div id="scr-change" class="hidden">
+    <div class="label">CURRENT PASSWORD</div><input id="ch-old" type="password">
+    <div class="label">NEW PASSWORD</div><input id="ch-new" type="password">
+    <div class="err" id="ch-err"></div>
+    <button onclick="doChangeMaster()">SET NEW PASSWORD</button>
+  </div>
+</div>
+
+<!-- VAULT -->
+<div id="scr-vault" class="hidden">
+  <header>
+    <h1>GLOVEBOX<span>UNLOCKED</span></h1>
+    <button class="btn-ghost btn-sm" onclick="lockNow()">LOCK</button>
+  </header>
+  <div class="wrap">
+    <input id="search" type="search" placeholder="Search..." oninput="render()">
+    <div class="tools">
+      <button class="btn-ghost btn-sm" onclick="showGen()">GENERATOR</button>
+      <button class="btn-ghost btn-sm" onclick="showExport()">EXPORT</button>
+      <button class="btn-ghost btn-sm" onclick="showImport()">IMPORT</button>
+    </div>
+    <div id="gen-box" class="card hidden">
+      <div class="label">PASSWORD GENERATOR</div>
+      <div class="row" style="align-items:center">
+        <input id="gen-len" type="number" min="8" max="64" value="20" style="width:80px;margin:0">
+        <button class="btn-sm" onclick="fillGen()">MAKE</button>
+      </div>
+      <div id="gen-out" class="p" style="margin-top:8px;min-height:18px"></div>
+      <div class="row"><button class="btn-ghost btn-sm" onclick="copyText(document.getElementById('gen-out').textContent)">COPY</button></div>
+    </div>
+    <div id="exp-box" class="card hidden">
+      <div class="label">BACKUP &mdash; COPY THIS SOMEWHERE SAFE</div>
+      <textarea id="exp-out" readonly></textarea>
+      <div class="row"><button class="btn-sm" onclick="copyText(document.getElementById('exp-out').value)">COPY BACKUP</button></div>
+    </div>
+    <div id="imp-box" class="card hidden">
+      <div class="label">PASTE A BACKUP HERE (REPLACES CURRENT DATA)</div>
+      <textarea id="imp-in"></textarea>
+      <div class="row"><button class="btn-sm" onclick="doImport()">RESTORE</button></div>
+      <div class="err" id="imp-err"></div>
+    </div>
+    <div id="list"></div>
+  </div>
+  <button class="fab" onclick="showEditor()">+</button>
+</div>
+
+<!-- EDITOR -->
+<div id="scr-edit" class="hidden">
+  <header><h1 id="ed-head">NEW ENTRY</h1><button class="btn-ghost btn-sm" onclick="hideEditor()">CLOSE</button></header>
+  <div class="wrap">
+    <div class="label">TITLE</div><input id="ed-title" placeholder="e.g. Gmail">
+    <div class="label">USERNAME / EMAIL</div><input id="ed-user">
+    <div class="label">PASSWORD</div>
+    <div class="row"><input id="ed-pass" style="margin:0;flex:1"><button class="btn-ghost btn-sm" onclick="genIntoEntry()">GEN</button></div>
+    <div class="label">URL (OPTIONAL)</div><input id="ed-url">
+    <div class="label">NOTES</div><textarea id="ed-notes"></textarea>
+    <div class="err" id="ed-err"></div>
+    <button onclick="saveEntry()">SAVE</button>
+    <button class="btn-ghost" style="margin-left:8px" onclick="hideEditor()">CANCEL</button>
+  </div>
+</div>
+
+<div id="lockbar" class="lockbar hidden">AUTO-LOCK SOON &mdash; TOUCH TO STAY OPEN</div>
+
+<script>
+'use strict';
+var SALT_B = 'gb_salt', VER_B = 'gb_ver', DATA_B = 'gb_data';
+var enc = new TextEncoder(), dec = new TextDecoder();
+var KEY = null, DATA = null, lockTimer = null;
+
+function b2b64(b){ var s=''; var u=new Uint8Array(b); for(var i=0;i<u.length;i++) s+=String.fromCharCode(u[i]); return btoa(s); }
+function b642b(s){ var r=atob(s), u=new Uint8Array(r.length); for(var i=0;i<r.length;i++) u[i]=r.charCodeAt(i); return u; }
+
+function derive(pass, salt){
+  return crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveKey'])
+    .then(function(k){ return crypto.subtle.deriveKey(
+        {name:'PBKDF2', salt:salt, iterations:250000, hash:'SHA-256'},
+        k, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']); });
+}
+function aesEnc(key, text){
+  var iv = crypto.getRandomValues(new Uint8Array(12));
+  return crypto.subtle.encrypt({name:'AES-GCM', iv:iv}, key, enc.encode(text))
+    .then(function(ct){ return {iv:b2b64(iv), ct:b2b64(ct)}; });
+}
+function aesDec(key, box){
+  return crypto.subtle.decrypt({name:'AES-GCM', iv:b642b(box.iv)}, key, b642b(box.ct))
+    .then(function(pt){ return dec.decode(pt); });
+}
+
+function show(id){ ['scr-setup','scr-unlock','scr-vault','scr-edit'].forEach(function(s){ document.getElementById(s).classList.toggle('hidden', s!==id); }); }
+function showChange(){ document.getElementById('scr-change').classList.remove('hidden'); }
+function armLock(){
+  clearTimeout(lockTimer);
+  lockTimer = setTimeout(function(){ var b=document.getElementById('lockbar'); b.classList.remove('hidden');
+    setTimeout(function(){ lockNow(); }, 30000); }, 4*60*1000);
+}
+['touchstart','keydown','click'].forEach(function(ev){ document.addEventListener(ev, function(){ if(KEY) armLock(); }); });
+
+function doSetup(){
+  var p1 = document.getElementById('su-pass').value, p2 = document.getElementById('su-pass2').value, err = document.getElementById('su-err');
+  err.textContent = '';
+  if(p1.length < 8){ err.textContent = 'At least 8 characters. This is the only lock you have.'; return; }
+  if(p1 !== p2){ err.textContent = 'Passwords do not match.'; return; }
+  var salt = crypto.getRandomValues(new Uint8Array(16));
+  derive(p1, salt).then(function(key){
+    return aesEnc(key, 'glovebox-ok').then(function(v){
+      localStorage.setItem(SALT_B, b2b64(salt));
+      localStorage.setItem(VER_B, JSON.stringify(v));
+      KEY = key; DATA = {entries:[]};
+      saveData().then(function(){ show('scr-vault'); render(); armLock(); });
+    });
+  });
+}
+function tryUnlock(pass){
+  var salt = b642b(localStorage.getItem(SALT_B));
+  return derive(pass, salt).then(function(key){
+    var ver = JSON.parse(localStorage.getItem(VER_B));
+    return aesDec(key, ver).then(function(pt){
+      if(pt !== 'glovebox-ok') throw new Error('bad');
+      return key;
+    });
+  });
+}
+function doUnlock(){
+  var p = document.getElementById('ul-pass').value, err = document.getElementById('ul-err');
+  err.textContent = '';
+  tryUnlock(p).then(function(key){
+    KEY = key;
+    var raw = localStorage.getItem(DATA_B);
+    if(raw){
+      var box = JSON.parse(raw);
+      aesDec(KEY, box).then(function(pt){ DATA = JSON.parse(pt); show('scr-vault'); render(); armLock(); });
+    } else { DATA = {entries:[]}; show('scr-vault'); render(); armLock(); }
+  }).catch(function(){ err.textContent = 'Wrong password.'; });
+}
+function saveData(){
+  return aesEnc(KEY, JSON.stringify(DATA)).then(function(box){
+    localStorage.setItem(DATA_B, JSON.stringify(box));
+  });
+}
+function lockNow(){
+  KEY = null; DATA = null;
+  document.getElementById('lockbar').classList.add('hidden');
+  document.getElementById('ul-pass').value = '';
+  show('scr-unlock');
+}
+function doChangeMaster(){
+  var o = document.getElementById('ch-old').value, n = document.getElementById('ch-new').value, err = document.getElementById('ch-err');
+  err.textContent = '';
+  if(n.length < 8){ err.textContent = 'New password: at least 8 characters.'; return; }
+  tryUnlock(o).then(function(){
+    var salt = crypto.getRandomValues(new Uint8Array(16));
+    return derive(n, salt).then(function(key){
+      return aesEnc(key, 'glovebox-ok').then(function(v){
+        localStorage.setItem(SALT_B, b2b64(salt));
+        localStorage.setItem(VER_B, JSON.stringify(v));
+        KEY = key;
+        return saveData();
+      });
+    }).then(function(){ document.getElementById('ch-new').value=''; document.getElementById('ch-old').value=''; alert('Master password changed.'); });
+  }).catch(function(){ err.textContent = 'Current password is wrong.'; });
+}
+
+var EDIT_ID = null;
+function render(){
+  var q = document.getElementById('search').value.toLowerCase();
+  var box = document.getElementById('list');
+  box.innerHTML = '';
+  (DATA.entries || []).filter(function(e){ return !q || (e.title+' '+(e.user||'')+' '+(e.url||'')).toLowerCase().indexOf(q) >= 0; })
+  .forEach(function(e){
+    var d = document.createElement('div'); d.className = 'card';
+    var t = document.createElement('div'); t.className='t'; t.textContent = e.title; d.appendChild(t);
+    if(e.user){ var u=document.createElement('div'); u.className='u'; u.textContent=e.user; d.appendChild(u); }
+    var p = document.createElement('div'); p.className='p'; p.textContent = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'; p.dataset.pw = e.pass || '';
+    p.onclick = function(){ if(p.textContent.indexOf('\u2022') >= 0){ p.textContent = p.dataset.pw; } else { p.textContent = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'; } };
+    d.appendChild(p);
+    var row = document.createElement('div'); row.className='row';
+    var c1 = document.createElement('button'); c1.className='btn-ghost btn-sm'; c1.textContent='COPY PASSWORD';
+    c1.onclick = function(){ copyText(p.dataset.pw); };
+    row.appendChild(c1);
+    var c2 = document.createElement('button'); c2.className='btn-ghost btn-sm'; c2.textContent='EDIT';
+    c2.onclick = function(){ openEditor(e.id); };
+    row.appendChild(c2);
+    var c3 = document.createElement('button'); c3.className='btn-ghost btn-sm'; c3.textContent='DELETE';
+    c3.onclick = function(){ if(confirm('Delete "'+e.title+'"?')){ DATA.entries = DATA.entries.filter(function(x){ return x.id !== e.id; }); saveData().then(render); } };
+    row.appendChild(c3);
+    d.appendChild(row);
+    box.appendChild(d);
+  });
+  if(!box.children.length){ var e2 = document.createElement('div'); e2.style.color='var(--dim)'; e2.style.textAlign='center'; e2.style.padding='30px 0'; e2.textContent = 'Empty. Tap + to add your first entry.'; box.appendChild(e2); }
+}
+function showEditor(){ EDIT_ID = null; document.getElementById('ed-head').textContent='NEW ENTRY';
+  ['ed-title','ed-user','ed-pass','ed-url','ed-notes'].forEach(function(i){ document.getElementById(i).value=''; });
+  document.getElementById('ed-err').textContent=''; show('scr-edit'); }
+function openEditor(id){
+  var e = DATA.entries.find(function(x){ return x.id === id; }); if(!e) return;
+  EDIT_ID = id;
+  document.getElementById('ed-head').textContent='EDIT';
+  document.getElementById('ed-title').value=e.title||''; document.getElementById('ed-user').value=e.user||'';
+  document.getElementById('ed-pass').value=e.pass||''; document.getElementById('ed-url').value=e.url||'';
+  document.getElementById('ed-notes').value=e.notes||''; document.getElementById('ed-err').textContent='';
+  show('scr-edit');
+}
+function hideEditor(){ show('scr-vault'); render(); }
+function saveEntry(){
+  var t = document.getElementById('ed-title').value.trim(), err = document.getElementById('ed-err');
+  if(!t){ err.textContent = 'Title is required.'; return; }
+  var entry = { id: EDIT_ID || (Date.now().toString(36)+Math.random().toString(36).slice(2,6)), title:t,
+    user:document.getElementById('ed-user').value, pass:document.getElementById('ed-pass').value,
+    url:document.getElementById('ed-url').value, notes:document.getElementById('ed-notes').value };
+  if(EDIT_ID){ var i = DATA.entries.findIndex(function(x){ return x.id===EDIT_ID; }); DATA.entries[i] = entry; }
+  else { DATA.entries.push(entry); }
+  saveData().then(function(){ hideEditor(); });
+}
+function showGen(){ var g=document.getElementById('gen-box'); g.classList.toggle('hidden'); if(!g.classList.contains('hidden')) fillGen(); }
+function charset(){
+  return 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%^&*_-+=?';
+}
+function fillGen(){
+  var len = parseInt(document.getElementById('gen-len').value, 10) || 20;
+  if(len < 8) len = 8; if(len > 64) len = 64;
+  var cs = charset(), out = '', rnd = new Uint32Array(len);
+  crypto.getRandomValues(rnd);
+  for(var i=0;i<len;i++) out += cs[rnd[i] % cs.length];
+  document.getElementById('gen-out').textContent = out;
+}
+function genIntoEntry(){
+  var len = 20, cs = charset(), out = '', rnd = new Uint32Array(len);
+  crypto.getRandomValues(rnd);
+  for(var i=0;i<len;i++) out += cs[rnd[i] % cs.length];
+  document.getElementById('ed-pass').value = out;
+}
+function showExport(){ var b=document.getElementById('exp-box'); b.classList.toggle('hidden');
+  if(!b.classList.contains('hidden')){ document.getElementById('exp-out').value = JSON.stringify(DATA); } }
+function showImport(){ document.getElementById('imp-box').classList.toggle('hidden'); }
+function doImport(){
+  var err = document.getElementById('imp-err'); err.textContent='';
+  try { var d = JSON.parse(document.getElementById('imp-in').value);
+    if(!d.entries) throw new Error('bad');
+    DATA = d; saveData().then(function(){ document.getElementById('imp-in').value=''; render(); });
+  } catch(e){ err.textContent = 'That does not look like a GLOVEBOX backup.'; }
+}
+function copyText(t){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(t).catch(function(){ fallbackCopy(t); });
+  } else { fallbackCopy(t); }
+}
+function fallbackCopy(t){
+  var ta = document.createElement('textarea'); ta.value = t; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  try { document.execCommand('copy'); } catch(e){}
+  document.body.removeChild(ta);
+}
+
+(function init(){
+  if(!localStorage.getItem(SALT_B)) show('scr-setup');
+  else show('scr-unlock');
+})();
+</script>
+</body>
+</html>
