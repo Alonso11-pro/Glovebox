@@ -18,6 +18,7 @@ import androidx.biometric.BiometricManager;
 import androidx.biometric.BiometricPrompt;
 import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentActivity;
+import androidx.webkit.WebViewAssetLoader;
 
 import org.json.JSONObject;
 
