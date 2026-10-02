@@ -382,22 +382,37 @@ function compressImage(file, maxSize, quality){
   });
 }
 function addPhotos(input){
+  var err = document.getElementById('ed-err');
   if(!input.files || !input.files.length) return;
   var files = Array.prototype.slice.call(input.files);
   input.value = '';
-  (function next(i){
-    if(i >= files.length || edImages.length >= 6) return;
+  if(!files.length) return;
+  err.textContent = 'Processing photo...';
+  (function next(i, added){
+    if(i >= files.length){
+      err.textContent = added ? ('Photo added \u2713 (' + edImages.length + '/6)') : 'Could not add photo \u2014 tell Inky this exact message.';
+      return;
+    }
+    if(edImages.length >= 6){ err.textContent = 'Photo limit reached (6 per entry).'; return; }
     compressImage(files[i], 1280, 0.72).then(function(d1){
-      if(d1.length > 500000) return compressImage(files[i], 960, 0.55);
-      return d1;
+      if(d1 && d1.length <= 500000) return d1;
+      return compressImage(files[i], 960, 0.55);
     }).then(function(d){
-      if(d && d.length > 500000) return compressImage(files[i], 720, 0.45);
-      return d;
+      if(d && d.length <= 500000) return d;
+      return compressImage(files[i], 720, 0.4);
     }).then(function(d){
-      if(d && d.length <= 500000){ edImages.push(d); renderEditorPhotos(); }
-      next(i+1);
-    }).catch(function(){ next(i+1); });
-  })(0);
+      if(d && d.length <= 500000){
+        edImages.push(d); renderEditorPhotos();
+        next(i+1, added+1);
+      } else {
+        err.textContent = 'Photo too large to store.';
+        next(i+1, added);
+      }
+    }).catch(function(){
+      err.textContent = 'Photo format not supported (HEIC?). Set your camera to JPEG, or add a screenshot of the image.';
+      next(i+1, added);
+    });
+  })(0, 0);
 }
 function renderEditorPhotos(){
   var box = document.getElementById('ed-photos'); box.innerHTML='';
