@@ -231,6 +231,7 @@ function lockNow(){
   document.getElementById('lockbar').classList.add('hidden');
   document.getElementById('ul-pass').value = '';
   show('scr-unlock');
+  refreshBioBtn();
 }
 function doChangeMaster(){
   var o = document.getElementById('ch-old').value, n = document.getElementById('ch-new').value, err = document.getElementById('ch-err');
@@ -486,11 +487,18 @@ function disableBio(){
   showBio();
 }
 
+function refreshBioBtn(){
+  var b = document.getElementById('bio-btn');
+  try {
+    if(window.AndroidBridge && AndroidBridge.isBioEnabled()) b.classList.remove('hidden');
+    else b.classList.add('hidden');
+  } catch(e){ b.classList.add('hidden'); }
+}
 (function init(){
   if(!localStorage.getItem(SALT_B)) show('scr-setup');
   else {
     show('scr-unlock');
-    try { if(window.AndroidBridge && AndroidBridge.isBioEnabled()) document.getElementById('bio-btn').classList.remove('hidden'); } catch(e){}
+    refreshBioBtn();
   }
 })();
 </script>

@@ -289,10 +289,24 @@ public class MainActivity extends FragmentActivity {
         @JavascriptInterface
         public void bioUnlock() {
             runOnUiThread(() -> {
-                if (!isBioEnabled()) return;
+                BiometricManager bm = BiometricManager.from(MainActivity.this);
+                int can = bm.canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_WEAK);
+                if (can != BiometricManager.BIOMETRIC_SUCCESS) {
+                    toast("Fingerprint unavailable: " + bioReason(can));
+                    return;
+                }
+                if (!prefs().contains("bio_ct") || !prefs().getBoolean("bio_on", false)) {
+                    toast("Fingerprint not set up — enable it in GLOVEBOX settings");
+                    return;
+                }
                 BiometricPrompt prompt = new BiometricPrompt(MainActivity.this,
                         ContextCompat.getMainExecutor(MainActivity.this),
                         new BiometricPrompt.AuthenticationCallback() {
+                            @Override
+                            public void onAuthenticationError(int errorCode,
+                                    @NonNull CharSequence errString) {
+                                toast("Fingerprint: " + errString);
+                            }
                             @Override
                             public void onAuthenticationSucceeded(
                                     @NonNull BiometricPrompt.AuthenticationResult result) {
@@ -300,6 +314,8 @@ public class MainActivity extends FragmentActivity {
                                 if (master != null && webView != null) {
                                     webView.evaluateJavascript(
                                             "bioUnlockWithPassword(" + JSONObject.quote(master) + ")", null);
+                                } else {
+                                    toast("Fingerprint data corrupt — re-enable it in settings");
                                 }
                             }
                         });
@@ -309,6 +325,17 @@ public class MainActivity extends FragmentActivity {
                         .build());
             });
         }
+    }
+
+    private String bioReason(int can) {
+        if (can == BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED) return "no fingerprint enrolled";
+        if (can == BiometricManager.BIOMETRIC_ERROR_HW_UNAVAILABLE) return "sensor busy, try again";
+        if (can == BiometricManager.BIOMETRIC_ERROR_NO_HARDWARE) return "no fingerprint sensor";
+        return "code " + can;
+    }
+
+    private void toast(String m) {
+        android.widget.Toast.makeText(this, m, android.widget.Toast.LENGTH_LONG).show();
     }
 
     @Override
