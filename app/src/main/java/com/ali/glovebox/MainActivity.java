@@ -144,10 +144,25 @@ public class MainActivity extends FragmentActivity {
         @JavascriptInterface
         public void copy(String text) {
             runOnUiThread(() -> {
-                android.content.ClipboardManager cm =
-                        (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-                if (cm != null && text != null) {
-                    cm.setPrimaryClip(android.content.ClipData.newPlainText("GLOVEBOX", text));
+                try {
+                    android.content.ClipboardManager cm =
+                            (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                    if (cm != null && text != null) {
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("GLOVEBOX", text));
+                        android.content.ClipData clip = cm.getPrimaryClip();
+                        String back = (clip != null && clip.getItemCount() > 0)
+                                ? String.valueOf(clip.getItemAt(0).getText()) : null;
+                        if (text.equals(back)) {
+                            android.widget.Toast.makeText(MainActivity.this,
+                                    "Copied to clipboard", android.widget.Toast.LENGTH_SHORT).show();
+                        } else {
+                            android.widget.Toast.makeText(MainActivity.this,
+                                    "Clipboard blocked by phone", android.widget.Toast.LENGTH_LONG).show();
+                        }
+                    }
+                } catch (Exception e) {
+                    android.widget.Toast.makeText(MainActivity.this,
+                            "Copy failed: " + e.getMessage(), android.widget.Toast.LENGTH_LONG).show();
                 }
             });
         }

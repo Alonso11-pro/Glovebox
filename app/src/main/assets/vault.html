@@ -323,7 +323,7 @@ function copyText(t, btn){
       setTimeout(function(){ btn.textContent = old; }, 1200);
     }
   };
-  if(window.AndroidBridge && AndroidBridge.copy){ AndroidBridge.copy(t); done(); return; }
+  if(window.AndroidBridge && AndroidBridge.copy){ AndroidBridge.copy(t); return; }
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(t).then(done).catch(function(){ fallbackCopy(t); done(); });
   } else { fallbackCopy(t); done(); }
