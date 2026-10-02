@@ -33,6 +33,13 @@
   .label { font-family:monospace; font-size:11px; color:var(--dim); letter-spacing:2px; margin:8px 0 4px; }
   .tools { display:flex; gap:8px; margin:12px 0; flex-wrap:wrap; }
   .lockbar { position:fixed; top:0; left:0; right:0; background:#7a1a1a; color:#fff; text-align:center; font-size:12px; padding:4px; font-family:monospace; }
+  .thumbs { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
+  .thumbs .ph { position:relative; }
+  .thumbs img { width:72px; height:72px; object-fit:cover; border-radius:8px; border:1px solid var(--line); display:block; }
+  .thumbs .ph button { position:absolute; top:-7px; right:-7px; width:22px; height:22px; padding:0; border-radius:50%; font-size:12px; line-height:22px; background:#333; color:#fff; border:1px solid var(--line); }
+  .card .thumbs img { width:52px; height:52px; }
+  #viewer { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,.95); display:flex; align-items:center; justify-content:center; z-index:99; }
+  #viewer img { max-width:100%; max-height:100%; object-fit:contain; }
 </style>
 </head>
 <body>
@@ -126,6 +133,10 @@
     <div class="row"><input id="ed-pass" style="margin:0;flex:1"><button class="btn-ghost btn-sm" onclick="genIntoEntry()">GEN</button></div>
     <div class="label">URL (OPTIONAL)</div><input id="ed-url">
     <div class="label">NOTES</div><textarea id="ed-notes"></textarea>
+    <div class="label">PHOTOS</div>
+    <div id="ed-photos" class="thumbs"></div>
+    <button class="btn-ghost btn-sm" onclick="document.getElementById('ed-file').click()">ADD PHOTO</button>
+    <input id="ed-file" type="file" accept="image/*" multiple class="hidden" onchange="addPhotos(this)">
     <div class="err" id="ed-err"></div>
     <button onclick="saveEntry()">SAVE</button>
     <button class="btn-ghost" style="margin-left:8px" onclick="hideEditor()">CANCEL</button>
@@ -133,6 +144,7 @@
 </div>
 
 <div id="lockbar" class="lockbar hidden">AUTO-LOCK SOON &mdash; TOUCH TO STAY OPEN</div>
+<div id="viewer" class="hidden" onclick="this.classList.add('hidden')"><img id="viewer-img" alt=""></div>
 
 <script>
 'use strict';
@@ -207,7 +219,9 @@ function doUnlock(){
 }
 function saveData(){
   return aesEnc(KEY, JSON.stringify(DATA)).then(function(box){
-    localStorage.setItem(DATA_B, JSON.stringify(box));
+    var s = JSON.stringify(box);
+    try { localStorage.setItem(DATA_B, s); }
+    catch(e){ alert('Storage is full. Export a backup, then delete old photos or entries.'); throw e; }
   });
 }
 function lockNow(){
@@ -250,6 +264,15 @@ function render(){
     var p = document.createElement('div'); p.className='p'; p.textContent = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'; p.dataset.pw = e.pass || '';
     p.onclick = function(){ if(p.textContent.indexOf('\u2022') >= 0){ p.textContent = p.dataset.pw; } else { p.textContent = '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'; } };
     d.appendChild(p);
+    if(e.images && e.images.length){
+      var th = document.createElement('div'); th.className='thumbs';
+      e.images.forEach(function(src){
+        var im = document.createElement('img'); im.src = src;
+        im.onclick = function(){ openViewer(src); };
+        th.appendChild(im);
+      });
+      d.appendChild(th);
+    }
     var row = document.createElement('div'); row.className='row';
     var c1 = document.createElement('button'); c1.className='btn-ghost btn-sm'; c1.textContent='COPY PASSWORD';
     c1.onclick = function(){ copyText(p.dataset.pw, c1); };
@@ -267,6 +290,7 @@ function render(){
 }
 function showEditor(){ EDIT_ID = null; document.getElementById('ed-head').textContent='NEW ENTRY';
   ['ed-title','ed-user','ed-pass','ed-url','ed-notes'].forEach(function(i){ document.getElementById(i).value=''; });
+  edImages = []; renderEditorPhotos();
   document.getElementById('ed-err').textContent=''; show('scr-edit'); }
 function openEditor(id){
   var e = DATA.entries.find(function(x){ return x.id === id; }); if(!e) return;
@@ -275,6 +299,7 @@ function openEditor(id){
   document.getElementById('ed-title').value=e.title||''; document.getElementById('ed-user').value=e.user||'';
   document.getElementById('ed-pass').value=e.pass||''; document.getElementById('ed-url').value=e.url||'';
   document.getElementById('ed-notes').value=e.notes||''; document.getElementById('ed-err').textContent='';
+  edImages = (e.images || []).slice(); renderEditorPhotos();
   show('scr-edit');
 }
 function hideEditor(){ show('scr-vault'); render(); }
@@ -283,7 +308,8 @@ function saveEntry(){
   if(!t){ err.textContent = 'Title is required.'; return; }
   var entry = { id: EDIT_ID || (Date.now().toString(36)+Math.random().toString(36).slice(2,6)), title:t,
     user:document.getElementById('ed-user').value, pass:document.getElementById('ed-pass').value,
-    url:document.getElementById('ed-url').value, notes:document.getElementById('ed-notes').value };
+    url:document.getElementById('ed-url').value, notes:document.getElementById('ed-notes').value,
+    images: edImages.slice() };
   if(EDIT_ID){ var i = DATA.entries.findIndex(function(x){ return x.id===EDIT_ID; }); DATA.entries[i] = entry; }
   else { DATA.entries.push(entry); }
   saveData().then(function(){ hideEditor(); });
@@ -335,6 +361,59 @@ function fallbackCopy(t){
   document.body.removeChild(ta);
 }
 
+var edImages = [];
+function compressImage(file, maxSize, quality){
+  return new Promise(function(res, rej){
+    var r = new FileReader();
+    r.onload = function(){
+      var img = new Image();
+      img.onload = function(){
+        var w = img.width, h = img.height, scale = Math.min(1, maxSize / Math.max(w, h));
+        var c = document.createElement('canvas');
+        c.width = Math.round(w*scale); c.height = Math.round(h*scale);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        res(c.toDataURL('image/jpeg', quality));
+      };
+      img.onerror = rej;
+      img.src = r.result;
+    };
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+function addPhotos(input){
+  if(!input.files || !input.files.length) return;
+  var files = Array.prototype.slice.call(input.files);
+  input.value = '';
+  (function next(i){
+    if(i >= files.length || edImages.length >= 6) return;
+    compressImage(files[i], 1280, 0.72).then(function(d1){
+      if(d1.length > 500000) return compressImage(files[i], 960, 0.55);
+      return d1;
+    }).then(function(d){
+      if(d && d.length > 500000) return compressImage(files[i], 720, 0.45);
+      return d;
+    }).then(function(d){
+      if(d && d.length <= 500000){ edImages.push(d); renderEditorPhotos(); }
+      next(i+1);
+    }).catch(function(){ next(i+1); });
+  })(0);
+}
+function renderEditorPhotos(){
+  var box = document.getElementById('ed-photos'); box.innerHTML='';
+  edImages.forEach(function(src, idx){
+    var ph = document.createElement('div'); ph.className='ph';
+    var im = document.createElement('img'); im.src = src;
+    im.onclick = function(){ openViewer(src); };
+    var x = document.createElement('button'); x.textContent='\u00d7';
+    x.onclick = function(){ edImages.splice(idx,1); renderEditorPhotos(); };
+    ph.appendChild(im); ph.appendChild(x); box.appendChild(ph);
+  });
+}
+function openViewer(src){
+  document.getElementById('viewer-img').src = src;
+  document.getElementById('viewer').classList.remove('hidden');
+}
 function bioUnlock(){
   if(window.AndroidBridge) AndroidBridge.bioUnlock();
 }
