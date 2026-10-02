@@ -21,7 +21,7 @@
   .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:13px 14px; margin-bottom:10px; }
   .card .t { font-weight:700; font-size:15px; }
   .card .u { color:var(--dim); font-size:12px; margin-top:2px; word-break:break-all; }
-  .card .p { font-family:monospace; font-size:13px; color:var(--acc); margin-top:6px; word-break:break-all; }
+  .card .p { font-family:monospace; font-size:13px; color:var(--acc); margin-top:6px; word-break:break-all; user-select:text; -webkit-user-select:text; }
   .row { display:flex; gap:8px; margin-top:9px; flex-wrap:wrap; }
   .center { min-height:100vh; display:flex; flex-direction:column; justify-content:center; max-width:400px; margin:0 auto; padding:20px; }
   .logo { text-align:center; margin-bottom:30px; }
@@ -252,7 +252,7 @@ function render(){
     d.appendChild(p);
     var row = document.createElement('div'); row.className='row';
     var c1 = document.createElement('button'); c1.className='btn-ghost btn-sm'; c1.textContent='COPY PASSWORD';
-    c1.onclick = function(){ copyText(p.dataset.pw); };
+    c1.onclick = function(){ copyText(p.dataset.pw, c1); };
     row.appendChild(c1);
     var c2 = document.createElement('button'); c2.className='btn-ghost btn-sm'; c2.textContent='EDIT';
     c2.onclick = function(){ openEditor(e.id); };
@@ -316,10 +316,17 @@ function doImport(){
     DATA = d; saveData().then(function(){ document.getElementById('imp-in').value=''; render(); });
   } catch(e){ err.textContent = 'That does not look like a GLOVEBOX backup.'; }
 }
-function copyText(t){
+function copyText(t, btn){
+  var done = function(){
+    if(btn){
+      var old = btn.textContent; btn.textContent = 'COPIED ✓';
+      setTimeout(function(){ btn.textContent = old; }, 1200);
+    }
+  };
+  if(window.AndroidBridge && AndroidBridge.copy){ AndroidBridge.copy(t); done(); return; }
   if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(t).catch(function(){ fallbackCopy(t); });
-  } else { fallbackCopy(t); }
+    navigator.clipboard.writeText(t).then(done).catch(function(){ fallbackCopy(t); done(); });
+  } else { fallbackCopy(t); done(); }
 }
 function fallbackCopy(t){
   var ta = document.createElement('textarea'); ta.value = t; ta.style.position='fixed'; ta.style.opacity='0';

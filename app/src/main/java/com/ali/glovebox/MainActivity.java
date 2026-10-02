@@ -142,6 +142,17 @@ public class MainActivity extends FragmentActivity {
         }
 
         @JavascriptInterface
+        public void copy(String text) {
+            runOnUiThread(() -> {
+                android.content.ClipboardManager cm =
+                        (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                if (cm != null && text != null) {
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("GLOVEBOX", text));
+                }
+            });
+        }
+
+        @JavascriptInterface
         public void bioUnlock() {
             runOnUiThread(() -> {
                 if (!isBioEnabled()) return;
