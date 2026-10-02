@@ -3,6 +3,10 @@ package com.ali.glovebox;
 import android.content.Intent;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
+import android.media.ExifInterface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.security.keystore.KeyGenParameterSpec;
@@ -26,6 +30,8 @@ import androidx.webkit.WebViewAssetLoader;
 
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.security.KeyStore;
 
 import javax.crypto.Cipher;
@@ -37,6 +43,7 @@ public class MainActivity extends FragmentActivity {
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
     private static final int FILE_CHOOSER_CODE = 4701;
+    private static final int PICK_PHOTO_CODE = 4702;
     private static final String KEY_ALIAS = "glovebox_bio";
     private static final String PREFS = "glovebox_native";
 
@@ -83,12 +90,77 @@ public class MainActivity extends FragmentActivity {
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == FILE_CHOOSER_CODE && fileCallback != null) {
+        if (requestCode == PICK_PHOTO_CODE) {
+            if (resultCode != RESULT_OK || data == null || data.getData() == null) return;
+            final Uri uri = data.getData();
+            new Thread(() -> {
+                try {
+                    Bitmap raw = loadScaledBitmap(uri, 1280);
+                    if (raw == null) { js("photoError('Could not read that image')"); return; }
+                    Bitmap fixed = rotatePerExif(uri, raw);
+                    String dataUrl = encodeJpeg(fixed, 72);
+                    js("photoPicked(" + JSONObject.quote(dataUrl) + ")");
+                } catch (Exception e) {
+                    js("photoError('Could not read that image')");
+                }
+            }).start();
+        } else if (requestCode == FILE_CHOOSER_CODE && fileCallback != null) {
             fileCallback.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data));
             fileCallback = null;
         } else {
             super.onActivityResult(requestCode, resultCode, data);
         }
+    }
+
+    private void js(String call) {
+        runOnUiThread(() -> webView.evaluateJavascript(call, null));
+    }
+
+    private Bitmap loadScaledBitmap(Uri uri, int maxDim) throws Exception {
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        InputStream is = getContentResolver().openInputStream(uri);
+        BitmapFactory.decodeStream(is, null, bounds);
+        if (is != null) is.close();
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null;
+
+        int sample = 1;
+        while (Math.max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxDim) sample *= 2;
+
+        BitmapFactory.Options opts = new BitmapFactory.Options();
+        opts.inSampleSize = sample;
+        is = getContentResolver().openInputStream(uri);
+        Bitmap b = BitmapFactory.decodeStream(is, null, opts);
+        if (is != null) is.close();
+        if (b == null) return null;
+
+        float w = b.getWidth(), h = b.getHeight();
+        float scale = Math.min(1f, maxDim / Math.max(w, h));
+        if (scale < 1f) {
+            b = Bitmap.createScaledBitmap(b, Math.round(w * scale), Math.round(h * scale), true);
+        }
+        return b;
+    }
+
+    private Bitmap rotatePerExif(Uri uri, Bitmap b) throws Exception {
+        InputStream is = getContentResolver().openInputStream(uri);
+        ExifInterface exif = new ExifInterface(is);
+        int o = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+        if (is != null) is.close();
+        int degrees = 0;
+        if (o == ExifInterface.ORIENTATION_ROTATE_90) degrees = 90;
+        else if (o == ExifInterface.ORIENTATION_ROTATE_180) degrees = 180;
+        else if (o == ExifInterface.ORIENTATION_ROTATE_270) degrees = 270;
+        if (degrees == 0) return b;
+        Matrix m = new Matrix();
+        m.postRotate(degrees);
+        return Bitmap.createBitmap(b, 0, 0, b.getWidth(), b.getHeight(), m, true);
+    }
+
+    private String encodeJpeg(Bitmap b, int quality) {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        b.compress(Bitmap.CompressFormat.JPEG, quality, bos);
+        return "data:image/jpeg;base64," + Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP);
     }
 
     private boolean bioAvailable() {
@@ -171,6 +243,21 @@ public class MainActivity extends FragmentActivity {
         @JavascriptInterface
         public void disableBio() {
             prefs().edit().remove("bio_iv").remove("bio_ct").putBoolean("bio_on", false).apply();
+        }
+
+        @JavascriptInterface
+        public void pickPhoto() {
+            runOnUiThread(() -> {
+                try {
+                    Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+                    i.addCategory(Intent.CATEGORY_OPENABLE);
+                    i.setType("image/*");
+                    startActivityForResult(i, PICK_PHOTO_CODE);
+                } catch (Exception e) {
+                    android.widget.Toast.makeText(MainActivity.this,
+                            "No photo picker found on this phone", android.widget.Toast.LENGTH_LONG).show();
+                }
+            });
         }
 
         @JavascriptInterface
